@@ -21,15 +21,20 @@
 typedef uint32_t ent_id;
 typedef uint8_t* comp_ptr;
 typedef uint32_t entitytype_t; // this is a placeholder for an item of an enum of entity types you might have
+typedef uint32_t componenttype_t; // similar but for components.
+
+typedef struct {
+	componenttype_t type;
+	comp_ptr component;
+} comp_tuple;
 
 /*
  * Note: may have to increase the size of the mask as more components are added.
  */
-
 typedef struct {
 	entitytype_t type; // will have garbage initially - not much use right now, might remove
 	uint32_t component_mask; // bitmask with components this entity has
-	comp_ptr* components; // list of pointers to the components this entity has
+	comp_tuple* components; // list of pointers to the components this entity has, including comp types
 	uint8_t used_comp_slots; // used comp_ptr slots for this entity
 	uint8_t comp_slots_cap; // allocated comp_ptr slots for this entity
 } entity_t;
