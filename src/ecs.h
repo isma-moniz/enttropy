@@ -25,12 +25,17 @@ typedef uint32_t entitytype_t; // this is a placeholder for an item of an enum o
 /*
  * Note: may have to increase the size of the mask as more components are added.
  */
+
 typedef struct {
-	entitytype_t* entity_types; // will have garbage initially - not much use right now, might remove 
-	uint32_t* component_masks; // List of entity masks which determine what components the entity has
-	comp_ptr** components; // list of pointers to component pointers
-	uint8_t* comp_slots_cap; // allocated comp_ptr slots for each entity
-	uint8_t* used_comp_slots; // used comp_ptr slots for each entity
+	entitytype_t type; // will have garbage initially - not much use right now, might remove
+	uint32_t component_mask; // bitmask with components this entity has
+	comp_ptr* components; // list of pointers to the components this entity has
+	uint8_t used_comp_slots; // used comp_ptr slots for this entity
+	uint8_t comp_slots_cap; // allocated comp_ptr slots for this entity
+} entity_t;
+
+typedef struct {
+	entity_t* entities; // list of entities
 	uint32_t count; // number of created entities
 	uint32_t cap; // maximum number of entities allowed in storage
 } entitystore_t;
