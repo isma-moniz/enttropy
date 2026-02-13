@@ -70,47 +70,35 @@ int ecs_init(ecs_state_t* ecs_state, uint32_t component_count, ...) {
 }
 
 int ecs_init_entities(ecs_state_t* ecs_state) {
-	// entity store
 	ecs_state->entity_store.count = 0;
 	ecs_state->entity_store.cap = INITIAL_ENTITY_CAPACITY;
-	ecs_state->entity_store.component_masks = (uint32_t*)malloc(INITIAL_ENTITY_CAPACITY * sizeof(uint32_t));
 
-	if (!ecs_state->entity_store.component_masks) {
-		printf("Error: could not allocate memory for entity masks\n");
-		return -1;
-	}
-
-	if (!(ecs_state->entity_store.entity_types = (entitytype_t*)malloc(INITIAL_ENTITY_CAPACITY * sizeof(entitytype_t)))) {
-		printf("Error: could not allocate memory for entity types\n");
-		free(ecs_state->entity_store.component_masks);
-		ecs_state->entity_store.component_masks = NULL;
-		return -1;
-	}
-
-	if (!(ecs_state->entity_store.components = (comp_ptr**)malloc(INITIAL_ENTITY_CAPACITY * sizeof(comp_ptr*)))) {
-		printf("Error: could not allocate memory for component pointers\n");
-		free(ecs_state->entity_store.component_masks);
-		free(ecs_state->entity_store.entity_types);
-		ecs_state->entity_store.component_masks = ecs_state->entity_store.entity_types = NULL;
+	ecs_state->entity_store.entities = (entity_t*)malloc(INITIAL_ENTITY_CAPACITY * sizeof(entity_t));
+	entity_t* entities = ecs_state->entity_store.entities;
+	if (!entities) {
+		printf("Error: could not allocate memory for entities initialization.\n");
 		return -1;
 	}
 
 	for (int i = 0; i < INITIAL_ENTITY_CAPACITY; i++) {
-		if (!(ecs_state->entity_store.components[i] = (comp_ptr*)malloc(INITIAL_ENTITY_COMPONENT_CAPACITY * sizeof(comp_ptr)))) {
-			printf("Error: could not allocate memory for component pointers for entity %d\n", i);
-			free(ecs_state->entity_store.component_masks);
-			free(ecs_state->entity_store.entity_types);
+		// entities[i].type = ...; let's purposefully leave as garbage right now
+		entity_t ent = entities[i];
+		ent.comp_slots_cap = INITIAL_ENTITY_COMPONENT_CAPACITY;
+		ent.used_comp_slots = 0;
+		ent.component_mask = 0;
+		ent.components = (comp_tuple*)malloc(INITIAL_ENTITY_COMPONENT_CAPACITY * sizeof(comp_tuple));
+		if (!ent.components) {
+			printf("Error: could not allocate memory for entity %d component pointers.\n", i);
 			for (int j = 0; j < i; j++) {
-				free(ecs_state->entity_store.components[j]);
+				free(entities[j].components);
 			}
-			free(ecs_state->entity_store.components);
-			ecs_state->entity_store.component_masks = ecs_state->entity_store.entity_types = NULL;
-			ecs_state->entity_store.components = NULL;
+			free(ecs_state->entity_store.entities);
+			ecs_state->entity_store.entities = NULL;
 			return -1;
 		}
 	}
 
- 	return 0;
+	return 0;
 }
 
 void ecs_destroy(ecs_state_t* ecs_state) {
