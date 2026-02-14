@@ -133,16 +133,14 @@ void ecs_destroy(ecs_state_t* ecs_state) {
 }
 
 void ecs_destroy_entities(ecs_state_t* ecs_state) {
-	ecs_state->entity_store.count = 0;
 	ecs_state->entity_store.cap = 0;
-	if (ecs_state->entity_store.component_masks) {
-		free(ecs_state->entity_store.component_masks);
-		ecs_state->entity_store.component_masks = NULL;
+	entity_t* entities = ecs_state->entity_store.entities;
+	for (uint32_t i = 0; i < ecs_state->entity_store.count; i++) {
+		free(entities[i].components); // TODO: how to "free" components belonging to this entity efficiently?
 	}
-	if (ecs_state->entity_store.entity_types) {
-		free(ecs_state->entity_store.entity_types);
-		ecs_state->entity_store.entity_types = NULL;
-	}	
+	free(entities);
+	ecs_state->entity_store.entities = NULL;
+	ecs_state->entity_store.count = 0;
 }
 
 ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type) {
