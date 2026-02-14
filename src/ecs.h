@@ -28,6 +28,13 @@ typedef struct {
 	comp_ptr component;
 } comp_tuple;
 
+// idea: whenever we destroy an entity, put their components in this type of objects.
+// when we create new components, substitute the components at these first before allocating new stuff, effectively reciclying them :)
+typedef struct {
+	componenttype_t type;
+	comp_ptr component;
+} recycle_component;
+
 /*
  * Note: may have to increase the size of the mask as more components are added.
  */
@@ -56,6 +63,7 @@ typedef struct {
 
 typedef struct {
 	void** stack; // list of pointers to component replica sets
+	recycle_component* recycle_bin;
 	entitystore_t entity_store;
 	componentstore_t component_store;
 } ecs_state_t;
