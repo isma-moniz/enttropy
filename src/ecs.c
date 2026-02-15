@@ -228,6 +228,7 @@ int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t compone
 		return -2; // ok, but no new addition
 	}
 	
+	// add component to "stack"
 	if (ecs_state->component_store.replicas[component_id] == ecs_state->component_store.slots[component_id]) {
 		size_t new_size = ecs_state->component_store.slots[component_id] * 
 			AUGMENTATION_MULTIPLIER * ecs_state->component_store.sizes[component_id];
@@ -244,15 +245,30 @@ int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t compone
 	}
 
 	size_t component_size = ecs_state->component_store.sizes[component_id];
-	void* dest = ecs_get_component(ecs_state, entity_id, component_id);
+	void* dest = (uint8_t*)ecs_state->stack[component_id] + ecs_state->component_store.replicas[component_id] * ecs_state->component_store.sizes[component_id];
 
 	if (memcpy(dest, data, component_size) == NULL) {
 		printf("Error: couldn't copy component data to memory! Component id: %u\n", component_id);
 		return -1;
 	}
-
-	ecs_state->entity_store.component_masks[entity_id] |= (1 << component_id);
 	ecs_state->component_store.replicas[component_id]++;
+	
+	// update entity
+	entity_t* ent_ptr = &ecs_state->entity_store.entities[entity_id];
+	if (ent_ptr->used_comp_slots == ent_ptr->comp_slots_cap) {
+		size_t new_size = ent_ptr->comp_slots_cap * AUGMENTATION_MULTIPLIER * sizeof(comp_tuple);
+		ent_ptr->components = realloc(ent_ptr->components, new_size);
+		if (!ent_ptr->components) {
+			printf("Error: could not reallocate component storage for entity %d\n", entity_id);
+			return -1;
+		}
+
+		ent_ptr->comp_slots_cap = ent_ptr->comp_slots_cap * AUGMENTATION_MULTIPLIER;
+	}
+	ent_ptr->component_mask |= (1 << component_id);
+	comp_tuple tup = {component_id, dest};
+	ent_ptr->components[ent_ptr->used_comp_slots] = tup;
+	ent_ptr->used_comp_slots++;
 
 	return 0;
 }
