@@ -82,12 +82,12 @@ int ecs_init_entities(ecs_state_t* ecs_state) {
 
 	for (int i = 0; i < INITIAL_ENTITY_CAPACITY; i++) {
 		// entities[i].type = ...; let's purposefully leave as garbage right now
-		entity_t ent = entities[i];
-		ent.comp_slots_cap = INITIAL_ENTITY_COMPONENT_CAPACITY;
-		ent.used_comp_slots = 0;
-		ent.component_mask = 0;
-		ent.components = (comp_tuple*)malloc(INITIAL_ENTITY_COMPONENT_CAPACITY * sizeof(comp_tuple));
-		if (!ent.components) {
+		entity_t* ent = &entities[i];
+		ent->comp_slots_cap = INITIAL_ENTITY_COMPONENT_CAPACITY;
+		ent->used_comp_slots = 0;
+		ent->component_mask = 0;
+		ent->components = (comp_tuple*)malloc(INITIAL_ENTITY_COMPONENT_CAPACITY * sizeof(comp_tuple));
+		if (!ent->components) {
 			printf("Error: could not allocate memory for entity %d component pointers.\n", i);
 			for (int j = 0; j < i; j++) {
 				free(entities[j].components);
@@ -117,19 +117,19 @@ void ecs_destroy(ecs_state_t* ecs_state) {
 	if (ecs_state->stack) {
 		for (uint32_t i = 0; i < ecs_state->component_store.count; i++) {
 			free(ecs_state->stack[i]);
-			ecs_state->stack[i] = NULL;
 		}
-		ecs_state->component_store.count = 0;
 		free(ecs_state->stack);
 		ecs_state->stack = NULL;
 	}
-	if (ecs_state->entity_store.components) {
+	if (ecs_state->entity_store.entities) {
 		for (uint32_t i = 0; i < ecs_state->entity_store.count; i++) {
-			ecs_state->entity_store.used_comp_slots[i] = 0;
-			ecs_state->entity_store.comp_slots_cap[i] = INITIAL_ENTITY_COMPONENT_CAPACITY;
-			ecs_state->entity_store.components[i] = realloc(ecs_state->entity_store.components[i], INITIAL_ENTITY_COMPONENT_CAPACITY * sizeof (comp_ptr));
+			free(ecs_state->entity_store.entities[i].components);
 		}
+		free(ecs_state->entity_store.entities);
+		ecs_state->entity_store.entities = NULL;
+		ecs_state->entity_store.count = ecs_state->entity_store.cap = 0;
 	}
+	ecs_state->component_store.count = 0;
 }
 
 void ecs_destroy_entities(ecs_state_t* ecs_state) {
@@ -149,14 +149,12 @@ ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type) {
 
 	if (id == ecs_state->entity_store.cap) {
 		printf("ECS: Max entities reached, reallocating\n");
-		uint64_t new_size = AUGMENTATION_MULTIPLIER * ecs_state->entity_store.cap * sizeof(uint32_t);
+		uint64_t new_size = AUGMENTATION_MULTIPLIER * ecs_state->entity_store.cap * sizeof(entity_t);
 		printf("ECS: New size cap: %u entities, %lu bytes\n", AUGMENTATION_MULTIPLIER * ecs_state->entity_store.cap, new_size);
 		
-		ecs_state->entity_store.component_masks = realloc(ecs_state->entity_store.component_masks, new_size);
-		//WARNING: uncomment below if you decide to change entitytype_t to some other size, such as int
-		ecs_state->entity_store.entity_types = realloc(ecs_state->entity_store.entity_types, new_size /* * (sizeof(entitytype_t)/sizeof(uint32_t))*/);
-	
-		if (!ecs_state->entity_store.component_masks || !ecs_state->entity_store.entity_types) {
+		ecs_state->entity_store.entities = realloc(ecs_state->entity_store.entities, new_size);
+		
+		if (!ecs_state->entity_store.entities) {
 			printf("Error: could not reallocate entity storage!\n");
 			return -1;
 		}
@@ -165,16 +163,16 @@ ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type) {
 	}
 
 	ecs_state->entity_store.count++;
-	ecs_state->entity_store.component_masks[id] = 0;
-	ecs_state->entity_store.entity_types[id] = ent_type;
-
+	entity_t* ent_ptr = &ecs_state->entity_store.entities[id];
+	ent_ptr->type = ent_type;
+	/*
 	// zero out all components for this entity, so we can know if this entity has them later
 	// TODO: figure out a better solution lmao
 	for (uint32_t i = 0; i < ecs_state->component_store.count; i++) {
 		uint32_t size = ecs_state->component_store.sizes[i];
 		void* comp = (uint8_t*)ecs_state->stack[i] + size * id;
 		memset(comp, 0, size);
-	}
+	} */
 	return id;
 }
 
