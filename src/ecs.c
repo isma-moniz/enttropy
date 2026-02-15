@@ -176,8 +176,26 @@ ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type) {
 	return id;
 }
 
-void* ecs_get_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
+void* ecs_get_component_old(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
 	return (uint8_t*)ecs_state->stack[component_id] + (ecs_state->component_store.sizes[component_id] * entity_id);
+}
+
+void* ecs_get_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
+	entity_t* ent_ptr = &ecs_state->entity_store.entities[entity_id];
+	if (ent_ptr->component_mask & (1 << component_id)) {
+		// TODO: 
+		// in order to avoid iterating components and optimize a bit, 
+		// let's make some crazy algorithm involving the component mask
+		//
+		// base case: all components up to component_id present: can just use it as index.
+		// for each component before component_id not present: knock 1 off that index
+		for (uint8_t i = 0; i < ent_ptr->used_comp_slots; i++) {
+			if (ent_ptr->components[i].type == component_id) {
+				return ent_ptr->components[i].component;
+			}
+		}
+	}
+	return NULL;
 }
 
 void* ecs_get_component_replicas(ecs_state_t* ecs_state, uint32_t component_id) {
@@ -194,7 +212,7 @@ void ecs_component_callback(ecs_state_t* ecs_state, uint32_t component_id, void 
 }
 
 bool ecs_has_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
-	return (ecs_state->entity_store.component_masks[entity_id] & (1 << component_id)) != 0;
+	return (ecs_state->entity_store.entities[entity_id].component_mask & (1 << component_id)) != 0;
 }
 
 int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id, void* data) {
@@ -240,8 +258,8 @@ int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t compone
 }
 
 void ecs_remove_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
-	ecs_state->entity_store.component_masks[entity_id] &= ~(1 << component_id);
-	//TODO: implement deallocation
+	ecs_state->entity_store.entities[entity_id].component_mask &= ~(1 << component_id);
+	//TODO: implement deallocation / recycling
 	//WARNING: No deallocation made
 }
 

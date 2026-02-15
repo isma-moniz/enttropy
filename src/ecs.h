@@ -23,6 +23,7 @@ typedef uint8_t* comp_ptr;
 typedef uint32_t entitytype_t; // this is a placeholder for an item of an enum of entity types you might have
 typedef uint32_t componenttype_t; // similar but for components.
 
+// TODO: hashmap please...
 typedef struct {
 	componenttype_t type;
 	comp_ptr component;
