@@ -7,6 +7,10 @@ My initial implementation was EXTREMELY similar to user logmoon's entity compone
 
 The only reason I'm even creating this repo is because I want to heavily customise and improve it.
 
+## Architecture
+
+![architecture](architecture.png)
+
 ## Initial problems & Roadmap
 
 Right now the ecs will break if entity id is bigger than allocated slots. The entities and the allocated slots
