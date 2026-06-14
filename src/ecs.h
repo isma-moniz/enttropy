@@ -18,12 +18,12 @@
 #define INITIAL_ENTITY_COMPONENT_CAPACITY 4 // x2 will be 8, x2 will be 16, x2 will be 32
 #define AUGMENTATION_MULTIPLIER 2
 
-typedef uint32_t ent_id;
-typedef uint8_t* comp_ptr;
+typedef uint32_t ent_id; // 32 bit identifier uint
+typedef uint8_t* comp_ptr; // simple pointer to a byte
 typedef uint32_t entitytype_t; // this is a placeholder for an item of an enum of entity types you might have
 typedef uint32_t componenttype_t; // similar but for components.
 
-// TODO: hashmap please...
+// TODO: hashmap please... or better search algo
 typedef struct {
 	componenttype_t type;
 	comp_ptr component;
@@ -129,6 +129,6 @@ void ecs_component_callback(ecs_state_t* ecs_state, uint32_t component_id, void 
 
 bool ecs_has_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);
 
-int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id, void* data);
+int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id, void* data, void** loc);
 
 void ecs_remove_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);

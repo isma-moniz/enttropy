@@ -53,7 +53,7 @@ int ecs_init(ecs_state_t* ecs_state, uint32_t component_count, ...) {
 			free(ecs_state->component_store.replicas);
 			free(ecs_state->component_store.slots);
 			free(ecs_state->component_store.sizes);
-			for (int j = 0; j < i; j++) {
+			for (uint32_t j = 0; j < i; j++) {
 				free(ecs_state->stack[j]);
 			}
 			free(ecs_state->stack);
@@ -215,7 +215,7 @@ bool ecs_has_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t compon
 	return (ecs_state->entity_store.entities[entity_id].component_mask & (1 << component_id)) != 0;
 }
 
-int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id, void* data) {
+int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id, void* data, void** loc) {
 	if (ecs_state->stack[component_id] == NULL) {
 		// Component not initialized yet
 		printf("Error: Component was not initialized yet, check component with id %u\n", component_id);
@@ -269,6 +269,8 @@ int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t compone
 	comp_tuple tup = {component_id, dest};
 	ent_ptr->components[ent_ptr->used_comp_slots] = tup;
 	ent_ptr->used_comp_slots++;
+
+	if (loc != NULL) *loc = dest;
 
 	return 0;
 }
