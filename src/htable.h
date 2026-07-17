@@ -18,10 +18,10 @@ void *ht_get(htable *table, const char *key);
 
 // Set item with given key to value (value must not be NULL).
 // If not already present in table, key is copied to newly allocated memory.
-// Return address of copied key, or NULL if out of memory.
+// Return address of key, or NULL if out of memory.
 const char *ht_set(htable *table, const char *key, void *value);
 
-// Return number of items in hash table. ( TODO: Or is it keys?)
+// Return number of items in hash table.
 size_t ht_length(htable *table);
 
 // Hash table iterator: create with ht_iterator, iterate with ht_next.
