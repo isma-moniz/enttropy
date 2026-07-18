@@ -72,6 +72,8 @@ static uint64_t nt_set_entry (nt_entry* entries, size_t capacity,
 	uint64_t hash = hash_key(key);
 	size_t index = (size_t)(hash & (uint64_t)(capacity - 1));
 
+	// we don't check if it is full, because theoretically it never will be,
+	// as we keep resizing it to double as soon as it gets half full
 	while (entries[index].key != 0) {
 		if (key == entries[index].key) {
 			entries[index].value = value;
@@ -99,7 +101,7 @@ static uint64_t nt_set_entry (nt_entry* entries, size_t capacity,
  */
 static bool nt_expand(ntable* table) {
 	size_t new_capacity = table->capacity * 2;
-	if (new_capacity < table->capacity) {
+	if (new_capacity < table->capacity) { // overflow
 		return false;
 	}
 
@@ -127,7 +129,8 @@ uint64_t nt_set(ntable* table, uint64_t key, void* value) {
 		return NULL;
 	}
 
-	if (table->length >= table->capacity / 2) {
+	if (table->length >= table->capacity / 2) { // stops when no expansion
+								// possible. maybe let it fill up anyways?
 		if (!nt_expand(table)) {
 			return NULL;
 		}
