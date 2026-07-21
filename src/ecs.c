@@ -1,11 +1,16 @@
 #include "ecs.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h> // why the FUCK are memset and memcpy here??
+#include <string.h> 
 #include <stdarg.h>
 
+/*
+ * Points an entity's component store component tuple to a new component in the stack.
+ * This is called when deleting components causes a pop and swap to happen.
+ */
+int swap_component(entity_t* entity, componenttype_t comp_type, comp_ptr new_comp_ptr);
+
 int ecs_init(ecs_state_t* ecs_state, uint32_t component_count, ...) {
-	// components
 	if (!(ecs_state->stack = (void**)malloc(component_count * sizeof(void*)))) {
 		printf("Error: could not allocate memory for ecs_state\n");
 	}
@@ -66,6 +71,13 @@ int ecs_init(ecs_state_t* ecs_state, uint32_t component_count, ...) {
 	}
 
 	va_end(args);
+
+	ecs_state->entcomp_map = ht_create();
+	if (!ecs_state->entcomp_map) {
+		printf("Malformed ecs: unable to create entcomp map.\n");
+		printf("WRITE THE CLEANUPS HERE YOU LAZY BUM!\n");
+		return -1;
+	}
 	return 0;
 }
 
@@ -81,16 +93,16 @@ int ecs_init_entities(ecs_state_t* ecs_state) {
 	}
 
 	for (int i = 0; i < INITIAL_ENTITY_CAPACITY; i++) {
-		// entities[i].type = ...; let's purposefully leave as garbage right now
+		// entities[i].type = ...; WARNING: let's purposefully leave as garbage right now
 		entity_t* ent = &entities[i];
 		ent->comp_slots_cap = INITIAL_ENTITY_COMPONENT_CAPACITY;
 		ent->used_comp_slots = 0;
 		ent->component_mask = 0;
-		ent->components = (comp_tuple*)malloc(INITIAL_ENTITY_COMPONENT_CAPACITY * sizeof(comp_tuple));
+		ent->components = nt_create();
 		if (!ent->components) {
 			printf("Error: could not allocate memory for entity %d component pointers.\n", i);
 			for (int j = 0; j < i; j++) {
-				free(entities[j].components);
+				nt_destroy(entities[j].components);
 			}
 			free(ecs_state->entity_store.entities);
 			ecs_state->entity_store.entities = NULL;
@@ -114,6 +126,10 @@ void ecs_destroy(ecs_state_t* ecs_state) {
 		free(ecs_state->component_store.slots);
 		ecs_state->component_store.slots = NULL;
 	}
+	if (ecs_state->entcomp_map) {
+		free(ecs_state->entcomp_map);
+		ecs_state->entcomp_map = NULL;
+	}
 	if (ecs_state->stack) {
 		for (uint32_t i = 0; i < ecs_state->component_store.count; i++) {
 			free(ecs_state->stack[i]);
@@ -121,26 +137,27 @@ void ecs_destroy(ecs_state_t* ecs_state) {
 		free(ecs_state->stack);
 		ecs_state->stack = NULL;
 	}
+	ecs_state->component_store.count = 0;
 	if (ecs_state->entity_store.entities) {
 		for (uint32_t i = 0; i < ecs_state->entity_store.count; i++) {
-			free(ecs_state->entity_store.entities[i].components);
+			nt_destroy(ecs_state->entity_store.entities[i].components);
 		}
 		free(ecs_state->entity_store.entities);
 		ecs_state->entity_store.entities = NULL;
-		ecs_state->entity_store.count = ecs_state->entity_store.cap = 0;
+		ecs_state->entity_store.count = 0;
+		ecs_state->entity_store.cap = 0;
 	}
-	ecs_state->component_store.count = 0;
 }
 
-void ecs_destroy_entities(ecs_state_t* ecs_state) {
-	ecs_state->entity_store.cap = 0;
-	entity_t* entities = ecs_state->entity_store.entities;
-	for (uint32_t i = 0; i < ecs_state->entity_store.count; i++) {
-		free(entities[i].components); // TODO: how to "free" components belonging to this entity efficiently?
-	}
-	free(entities);
-	ecs_state->entity_store.entities = NULL;
-	ecs_state->entity_store.count = 0;
+int swap_component(entity_t* entity, componenttype_t comp_type, comp_ptr new_comp_ptr) {
+	if (!nt_get(entity->components, comp_type)) {
+		return -1;
+	} // NOTE: extra overhead, just to check if we aren't adding a 
+	  // new component.
+	if (!nt_set(entity->components, (uint64_t)comp_type, (void*)new_comp_ptr)) {
+		return -1;
+	} 
+	return 0;
 }
 
 ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type) {
@@ -165,53 +182,33 @@ ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type) {
 	ecs_state->entity_store.count++;
 	entity_t* ent_ptr = &ecs_state->entity_store.entities[id];
 	ent_ptr->type = ent_type;
-	/*
-	// zero out all components for this entity, so we can know if this entity has them later
-	// TODO: figure out a better solution lmao
-	for (uint32_t i = 0; i < ecs_state->component_store.count; i++) {
-		uint32_t size = ecs_state->component_store.sizes[i];
-		void* comp = (uint8_t*)ecs_state->stack[i] + size * id;
-		memset(comp, 0, size);
-	} */
 	return id;
 }
 
-void* ecs_get_component_old(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
-	return (uint8_t*)ecs_state->stack[component_id] + (ecs_state->component_store.sizes[component_id] * entity_id);
-}
 
-void* ecs_get_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
-	entity_t* ent_ptr = &ecs_state->entity_store.entities[entity_id];
-	if (ent_ptr->component_mask & (1 << component_id)) {
-		// TODO: 
-		// in order to avoid iterating components and optimize a bit, 
-		// let's make some crazy algorithm involving the component mask
-		//
-		// base case: all components up to component_id present: can just use it as index.
-		// for each component before component_id not present: knock 1 off that index
-		for (uint8_t i = 0; i < ent_ptr->used_comp_slots; i++) {
-			if (ent_ptr->components[i].type == component_id) {
-				return ent_ptr->components[i].component;
-			}
-		}
+void* ecs_get_component(ecs_state_t* ecs_state, ent_id entity_id, componenttype_t comp_type) {
+	entity_t* entity = &ecs_state->entity_store.entities[entity_id];
+	void* component = nt_get(entity->components, (uint64_t)comp_type);
+	if (!component) {
+		printf("No component of type %d found for entity %d.\n", comp_type, entity_id);
 	}
-	return NULL;
+	return component;
 }
 
-void* ecs_get_component_replicas(ecs_state_t* ecs_state, uint32_t component_id) {
-	return (uint8_t*)ecs_state->stack[component_id];
+void* ecs_get_component_replicas(ecs_state_t* ecs_state, componenttype_t comp_type) {
+	return ecs_state->stack[comp_type];
 }
 
 // TODO: needs testing
-void ecs_component_callback(ecs_state_t* ecs_state, uint32_t component_id, void (*func)(void*)) {
+void ecs_component_callback(ecs_state_t* ecs_state, componenttype_t comp_type, void (*func)(void*)) {
 	uint32_t offset = 0;
-	for (uint32_t i = 0; i < ecs_state->component_store.replicas[component_id]; i++) {
-		func((uint8_t*)ecs_state->stack[component_id] + offset);
-		offset += (ecs_state->component_store.sizes[component_id]);
+	for (uint32_t i = 0; i < ecs_state->component_store.replicas[comp_type]; i++) {
+		func((uint8_t*)ecs_state->stack[comp_type] + offset);
+		offset += (ecs_state->component_store.sizes[comp_type]);
 	}
 }
 
-bool ecs_has_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
+bool ecs_entity_has_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
 	return (ecs_state->entity_store.entities[entity_id].component_mask & (1 << component_id)) != 0;
 }
 
@@ -222,7 +219,7 @@ int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t compone
 		return -1; // error
 	}
 
-	if (ecs_has_component(ecs_state, entity_id, component_id)) {
+	if (ecs_entity_has_component(ecs_state, entity_id, component_id)) {
 		// A component replica for this entity already exists
 		printf("Warning: Component with id %u already exists for entity %u", component_id, entity_id);
 		return -2; // ok, but no new addition
@@ -255,29 +252,32 @@ int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t compone
 	
 	// update entity
 	entity_t* ent_ptr = &ecs_state->entity_store.entities[entity_id];
-	if (ent_ptr->used_comp_slots == ent_ptr->comp_slots_cap) {
-		size_t new_size = ent_ptr->comp_slots_cap * AUGMENTATION_MULTIPLIER * sizeof(comp_tuple);
-		ent_ptr->components = realloc(ent_ptr->components, new_size);
-		if (!ent_ptr->components) {
-			printf("Error: could not reallocate component storage for entity %d\n", entity_id);
-			return -1;
-		}
-
-		ent_ptr->comp_slots_cap = ent_ptr->comp_slots_cap * AUGMENTATION_MULTIPLIER;
-	}
 	ent_ptr->component_mask |= (1 << component_id);
-	comp_tuple tup = {component_id, dest};
-	ent_ptr->components[ent_ptr->used_comp_slots] = tup;
-	ent_ptr->used_comp_slots++;
+	nt_set(ent_ptr->components, component_id, dest);
+
+	// update entcomp_map
+	ht_set(ecs_state->entcomp_map, dest, ent_ptr);
 
 	if (loc != NULL) *loc = dest;
 
 	return 0;
 }
 
-void ecs_remove_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
+int ecs_remove_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id) {
 	ecs_state->entity_store.entities[entity_id].component_mask &= ~(1 << component_id);
-	//TODO: implement deallocation / recycling
-	//WARNING: No deallocation made
+	uint32_t size = ecs_state->component_store.sizes[component_id];
+
+	void *to_delete = ecs_get_component(ecs_state, entity_id, component_id);
+	void *last_replica = ecs_state->stack[component_id] + ecs_state->component_store.replicas[component_id] * size;
+	if (!memcpy(to_delete, last_replica, size)) {
+		printf("Error: couldn't copy component data to memory! Component id: %u\n", component_id);
+		return -1;
+	}
+	--ecs_state->component_store.replicas[component_id];
+	entity_t* ent = (entity_t*) ht_get(ecs_state->entcomp_map, last_replica);
+	if (!ent)
+		return -1;
+	
+	nt_set(ent->components, component_id, to_delete);
 }
 

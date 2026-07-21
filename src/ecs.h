@@ -13,6 +13,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "ntable.h"
+#include "htable.h"
+
 #define INITIAL_REPLICA_CAPACITY 10
 #define INITIAL_ENTITY_CAPACITY 10
 #define INITIAL_ENTITY_COMPONENT_CAPACITY 4 // x2 will be 8, x2 will be 16, x2 will be 32
@@ -31,10 +34,7 @@ typedef struct {
 
 // idea: whenever we destroy an entity, put their components in this type of objects.
 // when we create new components, substitute the components at these first before allocating new stuff, effectively reciclying them :)
-typedef struct {
-	componenttype_t type;
-	comp_ptr component;
-} recycle_component;
+
 
 /*
  * Note: may have to increase the size of the mask as more components are added.
@@ -42,9 +42,7 @@ typedef struct {
 typedef struct {
 	entitytype_t type; // will have garbage initially - not much use right now, might remove
 	uint32_t component_mask; // bitmask with components this entity has
-	comp_tuple* components; // list of pointers to the components this entity has, including comp types
-	uint8_t used_comp_slots; // used comp_ptr slots for this entity
-	uint8_t comp_slots_cap; // allocated comp_ptr slots for this entity
+	ntable* components; // hash table of component type to component_ptr. TODO: what if has two components of same type?
 } entity_t;
 
 typedef struct {
@@ -64,9 +62,9 @@ typedef struct {
 
 typedef struct {
 	void** stack; // list of pointers to component replica sets
-	recycle_component* recycle_bin;
 	entitystore_t entity_store;
 	componentstore_t component_store;
+	htable* entcomp_map; // maps component replica pointers to their owner entities.
 } ecs_state_t;
 
 /*
@@ -90,18 +88,11 @@ int ecs_init(ecs_state_t* ecs_state, uint32_t component_count, ...);
 int ecs_init_entities(ecs_state_t* ecs_state);
 
 /*
- * Destroys the entity component system by freeing data related to 
- * components. Data relating to entities is not touched and must be freed by a call
- * to ecs_destroy_entities.
+ * Destroys the entirety of the entity component system by freeing data related to 
+ * components and entities alike. Effectively resets the ECS to a state where you can 
+ * call the init functions on it again to reuse it.
  */
 void ecs_destroy(ecs_state_t* ecs_state);
-
-/*
- * Destroys the entities in the entity component system, leaving the core untouched.
- * If you wish to completely destroy the component system, an additional call to ecs_destroy 
- * must be done.
- */
-void ecs_destroy_entities(ecs_state_t* ecs_state);
 
 /*
  * Creates a new entity by reallocating the necessary containers if 
@@ -113,22 +104,22 @@ void ecs_destroy_entities(ecs_state_t* ecs_state);
 ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type);
 
 /*
- * Returns a void* to the instance of component *component_id* belonging to entity 
+ * Returns a void* to the instance of component *comp_type* belonging to entity 
  * *entity_id*
  */
-void* ecs_get_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);
+void* ecs_get_component(ecs_state_t* ecs_state, ent_id entity_id, componenttype_t comp_type);
 
 /*
  * Returns a pointer to the beginning of the component replicas
  * of a provided component id. Does NOT enforce the limit, i.e.
  * the caller must check for number of replicas if he plans to iterate.
  */
-void* get_component_replicas(ecs_state_t* ecs_state, uint32_t component_id);
+void* get_component_replicas(ecs_state_t* ecs_state, componenttype_t comp_type);
 
-void ecs_component_callback(ecs_state_t* ecs_state, uint32_t component_id, void (*func)(void*));
+void ecs_component_callback(ecs_state_t* ecs_state, componenttype_t comp_type, void (*func)(void*));
 
-bool ecs_has_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);
+bool ecs_entity_has_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);
 
 int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id, void* data, void** loc);
 
-void ecs_remove_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);
+int ecs_remove_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);
