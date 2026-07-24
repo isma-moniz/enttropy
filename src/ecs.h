@@ -22,26 +22,14 @@
 #define AUGMENTATION_MULTIPLIER 2
 
 typedef uint32_t ent_id; // 32 bit identifier uint
-typedef uint8_t* comp_ptr; // simple pointer to a byte
 typedef uint32_t entitytype_t; // this is a placeholder for an item of an enum of entity types you might have
 typedef uint32_t componenttype_t; // similar but for components.
+typedef uint32_t component_mask; // for convenient checking
 
-// TODO: hashmap please... or better search algo
 typedef struct {
-	componenttype_t type;
-	comp_ptr component;
-} comp_tuple;
-
-// idea: whenever we destroy an entity, put their components in this type of objects.
-// when we create new components, substitute the components at these first before allocating new stuff, effectively reciclying them :)
-
-
-/*
- * Note: may have to increase the size of the mask as more components are added.
- */
-typedef struct {
+	ent_id id; // attributed on initialization
 	entitytype_t type; // will have garbage initially - not much use right now, might remove
-	uint32_t component_mask; // bitmask with components this entity has
+	component_mask comp_mask;	
 	ntable* components; // hash table of component type to component_ptr. TODO: what if has two components of same type?
 } entity_t;
 
@@ -66,6 +54,9 @@ typedef struct {
 	componentstore_t component_store;
 	htable* entcomp_map; // maps component replica pointers to their owner entities.
 } ecs_state_t;
+
+typedef void* comp_ptr;
+typedef entity_t* ent_ptr;
 
 /*
  * Initializes the Entity Component System on the provided
@@ -98,8 +89,7 @@ void ecs_destroy(ecs_state_t* ecs_state);
  * Creates a new entity by reallocating the necessary containers if 
  * storage cap is exceeded and incrementing entity count.
  *
- * Right now the id is just the entity count. I think some integration with the
- * gamedefs enums would be advantageous.
+ * Right now the id is just the entity count. Starts with 0 (zero). 
  */ 
 ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type);
 
@@ -107,7 +97,8 @@ ent_id ecs_create_entity(ecs_state_t* ecs_state, entitytype_t ent_type);
  * Returns a void* to the instance of component *comp_type* belonging to entity 
  * *entity_id*
  */
-void* ecs_get_component(ecs_state_t* ecs_state, ent_id entity_id, componenttype_t comp_type);
+
+comp_ptr ecs_get_component(ecs_state_t* ecs_state, ent_id entity_id, componenttype_t comp_type);
 
 /*
  * Returns a pointer to the beginning of the component replicas
@@ -118,8 +109,13 @@ void* get_component_replicas(ecs_state_t* ecs_state, componenttype_t comp_type);
 
 void ecs_component_callback(ecs_state_t* ecs_state, componenttype_t comp_type, void (*func)(void*));
 
-bool ecs_entity_has_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);
+// WARNING: this is relying on entity id being the count - fine while no entity deletion, dangerous afterwards
+bool ecs_entity_has_component(ecs_state_t* ecs_state, ent_id entity_id, componenttype_t comp_type);
 
-int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id, void* data, void** loc);
+// WARNING: this is relying on entity id being the count - fine while no entity deletion, dangerous afterwards
+int ecs_add_component(ecs_state_t* ecs_state, ent_id entity_id, componenttype_t comp_type, void* data, void** loc);
 
-int ecs_remove_component(ecs_state_t* ecs_state, ent_id entity_id, uint32_t component_id);
+// WARNING: this is relying on entity id being the count - fine while no entity deletion, dangerous afterwards
+int ecs_remove_component(ecs_state_t* ecs_state, ent_id entity_id, componenttype_t comp_type);
+
+int ecs_remove_component_by_ptr(ecs_state_t* ecs_state, comp_ptr component, componenttype_t comp_type);
